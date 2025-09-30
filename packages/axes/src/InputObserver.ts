@@ -7,6 +7,7 @@ import { InputType, InputTypeObserver, toAxis } from "./inputType/InputType";
 import { EventManager, ChangeEventOption } from "./EventManager";
 import { AxisManager, Axis } from "./AxisManager";
 import { AxesOption } from "./Axes";
+import { DIRECTION_HORIZONTAL, DIRECTION_VERTICAL } from "./const";
 import {
   isOutside,
   getInsidePosition,
@@ -102,10 +103,17 @@ export class InputObserver implements InputTypeObserver {
     ) {
       this._isOutside = false;
     }
+
     depaPos = this._atOutside(depaPos);
     destPos = this._atOutside(destPos);
-
-    if (!this.options.nested || !this._isEndofAxis(offset, depaPos, destPos)) {
+    const isSameAxis = this._isSameAxisWithPrimary(nativeEvent, input);
+    
+    if (
+      !this.options.nested ||
+      !this._isEndofAxis(offset, depaPos, destPos) ||
+      /* 부모 전파 중단 조건 중, 최초 동작 축(방향)과 동일한 축인지 확인하는 조건 추가 */
+      !isSameAxis
+    ) {
       nativeEvent.__childrenAxesAlreadyChanged = true;
     }
 
@@ -137,14 +145,16 @@ export class InputObserver implements InputTypeObserver {
     velocity: number[],
     inputDuration?: number
   ) {
+    const nativeEvent = event.srcEvent ? event.srcEvent : event;
     if (
       this._isStopped ||
       !this._interruptManager.isInterrupting() ||
-      !this._moveDistance
+      !this._moveDistance ||
+      /* 인터랙션 종료 시점에서도, 축 방향 확인을 위한 가드 추가 */
+      !this._isSameAxisWithPrimary(nativeEvent, input)
     ) {
       return;
     }
-    const nativeEvent = event.srcEvent ? event.srcEvent : event;
     if (nativeEvent.__childrenAxesAlreadyReleased) {
       velocity = velocity.map(() => 0);
     }
@@ -269,5 +279,21 @@ export class InputObserver implements InputTypeObserver {
             option.circular as boolean[]
           ))
     );
+  }
+
+  /* 최초 동작 축(방향)과 동일한 축인지 확인 */
+  private _isSameAxisWithPrimary(nativeEvent: any, input: InputType): boolean {
+    const primary = nativeEvent.__axesPrimaryDirection;
+    if (!primary) {
+      return false;
+    }
+    const hasX = !!input.axes[0];
+    const hasY = !!input.axes[1];
+    if (primary === DIRECTION_HORIZONTAL) {
+      return hasX && !hasY;
+    } else if (primary === DIRECTION_VERTICAL) {
+      return hasY && !hasX;
+    }
+    return false;
   }
 }
