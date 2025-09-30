@@ -137,6 +137,8 @@ export class PanInput implements InputType {
   private _rightEdgeTimer = 0;
   private _dragged = false;
   private _isOverThreshold = false;
+  /* 최초 동작 축(방향) */
+  private _primaryDirection = DIRECTION_NONE;
 
   /**
    *
@@ -267,6 +269,8 @@ export class PanInput implements InputType {
 
       this._dragged = false;
       this._isOverThreshold = false;
+      /* 최초 동작 축(방향) 초기화 */
+      this._primaryDirection = DIRECTION_NONE;
       this._observer.hold(this, panEvent);
       this._atRightEdge =
         IS_IOS_SAFARI && panEvent.center.x > window.innerWidth - edgeThreshold;
@@ -314,6 +318,15 @@ export class PanInput implements InputType {
       userDirection
     );
 
+    /* 최초 동작 축(방향) 결정 */
+    if (this._primaryDirection === DIRECTION_NONE) {
+      if (useHorizontal && !useVertical) {
+        this._primaryDirection = DIRECTION_HORIZONTAL;
+      } else if (useVertical && !useHorizontal) {
+        this._primaryDirection = DIRECTION_VERTICAL;
+      }
+    }
+
     if (activeEvent.prevEvent && IS_IOS_SAFARI) {
       const swipeLeftToRight = panEvent.center.x < 0;
 
@@ -352,6 +365,10 @@ export class PanInput implements InputType {
       panEvent.srcEvent.stopPropagation();
     }
     panEvent.preventSystemEvent = prevent;
+    /* 부모에게 전달되는 네이티브 이벤트 객체(srcEvent)에 방향 정보 추가 */
+    if (this._primaryDirection !== DIRECTION_NONE && panEvent && panEvent.srcEvent) {
+      (panEvent.srcEvent as any).__axesPrimaryDirection = this._primaryDirection;
+    }
     if (prevent && (this._isOverThreshold || distance >= threshold)) {
       this._dragged = preventClickOnDrag;
       this._isOverThreshold = true;
@@ -382,6 +399,8 @@ export class PanInput implements InputType {
     ) : [0, 0];
     activeEvent.onRelease();
     this._observer.release(this, prevEvent, velocity);
+    /* 최초 동작 축(방향) 초기화 */
+    this._primaryDirection = DIRECTION_NONE;
   }
 
   protected _attachWindowEvent(activeEvent: ActiveEvent) {
