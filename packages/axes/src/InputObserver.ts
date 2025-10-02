@@ -71,17 +71,21 @@ export class InputObserver implements InputTypeObserver {
   }
 
   public change(input: InputType, event, offset: Axis, useAnimation?: boolean) {
+    const nativeEvent = event.srcEvent ? event.srcEvent : event;
+    const isSameAxis = this._isSameAxisWithPrimary(nativeEvent, input);
+
+    /* early return condition */
     if (
       this._isStopped ||
       !this._interruptManager.isInterrupting() ||
-      this._axisManager.every(offset, (v) => v === 0)
+      this._axisManager.every(offset, (v) => v === 0) ||
+      nativeEvent.__childrenAxesAlreadyChanged ||
+      /* 부모 전파 중단 조건 중, 최초 동작 축(방향)과 동일한 축인지 확인하는 조건 추가 */
+      !isSameAxis
     ) {
       return;
     }
-    const nativeEvent = event.srcEvent ? event.srcEvent : event;
-    if (nativeEvent.__childrenAxesAlreadyChanged) {
-      return;
-    }
+
     let depaPos: Axis = this._moveDistance || this._axisManager.get(input.axes);
     let destPos: Axis;
 
@@ -106,13 +110,10 @@ export class InputObserver implements InputTypeObserver {
 
     depaPos = this._atOutside(depaPos);
     destPos = this._atOutside(destPos);
-    const isSameAxis = this._isSameAxisWithPrimary(nativeEvent, input);
-    
+
     if (
       !this.options.nested ||
-      !this._isEndofAxis(offset, depaPos, destPos) ||
-      /* 부모 전파 중단 조건 중, 최초 동작 축(방향)과 동일한 축인지 확인하는 조건 추가 */
-      !isSameAxis
+      !this._isEndofAxis(offset, depaPos, destPos)
     ) {
       nativeEvent.__childrenAxesAlreadyChanged = true;
     }
@@ -284,6 +285,7 @@ export class InputObserver implements InputTypeObserver {
   /* 최초 동작 축(방향)과 동일한 축인지 확인 */
   private _isSameAxisWithPrimary(nativeEvent: any, input: InputType): boolean {
     const primary = nativeEvent.__axesPrimaryDirection;
+
     if (!primary) {
       return false;
     }
