@@ -366,8 +366,9 @@ export class PanInput implements InputType {
     }
     panEvent.preventSystemEvent = prevent;
     /* 부모에게 전달되는 네이티브 이벤트 객체(srcEvent)에 방향 정보 추가 */
-    if (this._primaryDirection !== DIRECTION_NONE && panEvent && panEvent.srcEvent) {
-      (panEvent.srcEvent as any).__axesPrimaryDirection = this._primaryDirection;
+    const panSrcEvent = panEvent?.srcEvent as any;
+    if (this._primaryDirection !== DIRECTION_NONE && panSrcEvent && !panSrcEvent.__axesPrimaryDirection) {
+      panSrcEvent.__axesPrimaryDirection = this._primaryDirection;
     }
     if (prevent && (this._isOverThreshold || distance >= threshold)) {
       this._dragged = preventClickOnDrag;
