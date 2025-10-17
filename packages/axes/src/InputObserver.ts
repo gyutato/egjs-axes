@@ -55,6 +55,8 @@ export class InputObserver implements InputTypeObserver {
     if (this._interruptManager.isInterrupted() || !input.axes.length) {
       return;
     }
+
+    // console.log("hold: ", event.srcEvent.currentTarget, event.srcEvent)
     const changeOption: ChangeEventOption = {
       input,
       event,
@@ -72,8 +74,12 @@ export class InputObserver implements InputTypeObserver {
 
   public change(input: InputType, event, offset: Axis, useAnimation?: boolean) {
     const nativeEvent = event.srcEvent ? event.srcEvent : event;
-    const isSameAxis = this._isSameAxisWithPrimary(nativeEvent, input);
+    // console.log("change: ", event.srcEvent.currentTarget, JSON.stringify(event.srcEvent))
+    console.log("change: ", this, nativeEvent.__axesPrimaryDirection)
 
+    // TODO: 변수명 변경
+    const isCrossInput = nativeEvent.__axesPrimaryDirection && !this._isSameAxisWithPrimary(nativeEvent, input)
+  
     /* early return condition */
     if (
       this._isStopped ||
@@ -81,7 +87,7 @@ export class InputObserver implements InputTypeObserver {
       this._axisManager.every(offset, (v) => v === 0) ||
       nativeEvent.__childrenAxesAlreadyChanged ||
       /* 부모 전파 중단 조건 중, 최초 동작 축(방향)과 동일한 축인지 확인하는 조건 추가 */
-      !isSameAxis
+      isCrossInput
     ) {
       return;
     }
@@ -150,9 +156,7 @@ export class InputObserver implements InputTypeObserver {
     if (
       this._isStopped ||
       !this._interruptManager.isInterrupting() ||
-      !this._moveDistance ||
-      /* 인터랙션 종료 시점에서도, 축 방향 확인을 위한 가드 추가 */
-      !this._isSameAxisWithPrimary(nativeEvent, input)
+      !this._moveDistance
     ) {
       return;
     }

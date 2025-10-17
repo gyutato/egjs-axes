@@ -20,6 +20,7 @@ import {
   DIRECTION_HORIZONTAL,
   MOUSE_LEFT,
   ANY,
+  DIRECTION_ALL,
 } from "../const";
 import { ActiveEvent, ElementType, InputEventType } from "../types";
 
@@ -137,6 +138,7 @@ export class PanInput implements InputType {
   private _rightEdgeTimer = 0;
   private _dragged = false;
   private _isOverThreshold = false;
+  private _isDirectionSet = false;
   /* 최초 동작 축(방향) */
   private _primaryDirection = DIRECTION_NONE;
 
@@ -318,12 +320,19 @@ export class PanInput implements InputType {
       userDirection
     );
 
-    /* 최초 동작 축(방향) 결정 */
+    console.log("panInput: ", this, userDirection)
+    /* 현재 동작 축(방향) 결정 */
     if (this._primaryDirection === DIRECTION_NONE) {
-      if (useHorizontal && !useVertical) {
-        this._primaryDirection = DIRECTION_HORIZONTAL;
-      } else if (useVertical && !useHorizontal) {
-        this._primaryDirection = DIRECTION_VERTICAL;
+      switch (true) {
+        case useHorizontal && !useVertical:
+          this._primaryDirection = DIRECTION_HORIZONTAL;
+          break;
+        case useVertical && !useHorizontal:
+          this._primaryDirection = DIRECTION_VERTICAL;
+          break;
+        case useHorizontal && useVertical:
+          this._primaryDirection = DIRECTION_ALL;
+          break;
       }
     }
 
@@ -367,9 +376,21 @@ export class PanInput implements InputType {
     panEvent.preventSystemEvent = prevent;
     /* 부모에게 전달되는 네이티브 이벤트 객체(srcEvent)에 방향 정보 추가 */
     const panSrcEvent = panEvent?.srcEvent as any;
-    if (this._primaryDirection !== DIRECTION_NONE && panSrcEvent && !panSrcEvent.__axesPrimaryDirection) {
+    const hasPrimaryDirection = panSrcEvent.__axesPrimaryDirection;
+    // TODO: 거리 관련 적절한 threshold 추가 (기존 값 사용 X)
+    // (1) 전달받은 최초 동작 축이 없고, (2) 현재 동작이 threshold 이상인 경우 축 정보를 설정
+    const DIRECTION_THRESHOLD = 20;
+    const delta = this._primaryDirection === DIRECTION_HORIZONTAL ?
+      activeEvent.prevEvent.deltaX :
+      activeEvent.prevEvent.deltaY;
+    if (!this._isDirectionSet && Math.abs(delta) >= DIRECTION_THRESHOLD) {
+      this._isDirectionSet = true;
+    }
+    if (this._primaryDirection !== DIRECTION_NONE && panSrcEvent && !hasPrimaryDirection && this._isDirectionSet) {
+      // console.log("panInput: ", this, this._primaryDirection)
       panSrcEvent.__axesPrimaryDirection = this._primaryDirection;
     }
+
     if (prevent && (this._isOverThreshold || distance >= threshold)) {
       this._dragged = preventClickOnDrag;
       this._isOverThreshold = true;
@@ -402,6 +423,7 @@ export class PanInput implements InputType {
     this._observer.release(this, prevEvent, velocity);
     /* 최초 동작 축(방향) 초기화 */
     this._primaryDirection = DIRECTION_NONE;
+    this._isDirectionSet = false;
   }
 
   protected _attachWindowEvent(activeEvent: ActiveEvent) {
