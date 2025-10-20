@@ -259,6 +259,7 @@ export class PanInput implements InputType {
     const { inputKey, inputButton, preventDefaultOnDrag } = this.options;
     const activeEvent = this._activeEvent;
     const panEvent = activeEvent.onEventStart(event, inputKey, inputButton);
+
     if (
       !panEvent ||
       !this._enabled ||
@@ -320,7 +321,6 @@ export class PanInput implements InputType {
       userDirection
     );
 
-    console.log("panInput: ", this, userDirection)
     /* 현재 동작 축(방향) 결정 */
     if (this._primaryDirection === DIRECTION_NONE) {
       switch (true) {
@@ -374,8 +374,21 @@ export class PanInput implements InputType {
       panEvent.srcEvent.stopPropagation();
     }
     panEvent.preventSystemEvent = prevent;
-    /* 부모에게 전달되는 네이티브 이벤트 객체(srcEvent)에 방향 정보 추가 */
+
+    /**
+     * 전파되는 이벤트 객체에 여태까지의 Input 객체를 저장한 스택을 추가.
+     * 위의 early return 조건에 의해, 이미 diasabled 상태인 경우에는 스택에 추가되지 않음
+     */
     const panSrcEvent = panEvent?.srcEvent as any;
+
+    if (panSrcEvent) {
+      const stack = panSrcEvent.__inputStack || [];
+      panSrcEvent.__inputStack = stack.concat([this]);
+    }
+
+    /**
+     *  부모에게 전달되는 네이티브 이벤트 객체(srcEvent)에 방향 정보 추가
+     */
     const hasPrimaryDirection = panSrcEvent.__axesPrimaryDirection;
     // TODO: 거리 관련 적절한 threshold 추가 (기존 값 사용 X)
     // (1) 전달받은 최초 동작 축이 없고, (2) 현재 동작이 threshold 이상인 경우 축 정보를 설정
@@ -383,12 +396,21 @@ export class PanInput implements InputType {
     const delta = this._primaryDirection === DIRECTION_HORIZONTAL ?
       activeEvent.prevEvent.deltaX :
       activeEvent.prevEvent.deltaY;
+
     if (!this._isDirectionSet && Math.abs(delta) >= DIRECTION_THRESHOLD) {
       this._isDirectionSet = true;
     }
+
+    // TODO(@gyutato): 하단 prevent 조건문 내부로 이동할 수 있는지 확인
     if (this._primaryDirection !== DIRECTION_NONE && panSrcEvent && !hasPrimaryDirection && this._isDirectionSet) {
-      // console.log("panInput: ", this, this._primaryDirection)
       panSrcEvent.__axesPrimaryDirection = this._primaryDirection;
+      panSrcEvent.__inputStack.forEach((input, index) => {
+        if (index === panSrcEvent.__inputStack.length - 1) {
+          return;
+        } 
+
+        input.release();
+      });
     }
 
     if (prevent && (this._isOverThreshold || distance >= threshold)) {

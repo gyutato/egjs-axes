@@ -73,11 +73,12 @@ export class InputObserver implements InputTypeObserver {
   }
 
   public change(input: InputType, event, offset: Axis, useAnimation?: boolean) {
-    const nativeEvent = event.srcEvent ? event.srcEvent : event;
-    // console.log("change: ", event.srcEvent.currentTarget, JSON.stringify(event.srcEvent))
-    console.log("change: ", this, nativeEvent.__axesPrimaryDirection)
+    const nativeEvent = event.srcEvent ? event.srcEvent : event;   
 
-    // TODO: 변수명 변경
+    /** 
+     * 아래 early return 판단 조건 중, 최초 동작 축(방향)과 동일한 축인지 확인하는 조건 추가
+     * TODO(@gyutato): 비직관적인 변수명이므로 가능하다면 변경
+     */
     const isCrossInput = nativeEvent.__axesPrimaryDirection && !this._isSameAxisWithPrimary(nativeEvent, input)
   
     /* early return condition */
@@ -86,7 +87,6 @@ export class InputObserver implements InputTypeObserver {
       !this._interruptManager.isInterrupting() ||
       this._axisManager.every(offset, (v) => v === 0) ||
       nativeEvent.__childrenAxesAlreadyChanged ||
-      /* 부모 전파 중단 조건 중, 최초 동작 축(방향)과 동일한 축인지 확인하는 조건 추가 */
       isCrossInput
     ) {
       return;
