@@ -141,6 +141,7 @@ export class PanInput implements InputType {
   private _isDirectionSet = false;
   /* 최초 동작 축(방향) */
   private _primaryDirection = DIRECTION_NONE;
+  private _ignoreChange = false;
 
   /**
    *
@@ -242,6 +243,28 @@ export class PanInput implements InputType {
   }
 
   /**
+   * Disables change event propagation to subsequent events
+   * @ko 후속 이벤트에서 change 가 동작하지 않도록 설정한다.
+   * @return {PanInput} An instance of a module itself <ko>모듈 자신의 인스턴스</ko>
+   */
+  public ignoreChange() {
+    this._ignoreChange = true;
+
+    return this;
+  }
+
+  /**
+   * Resumes change event propagation to subsequent events
+   * @ko 후속 이벤트에서 change 가 동작하도록 설정한다.
+   * @returns {PanInput} An instance of a module itself <ko>모듈 자신의 인스턴스</ko>
+   */
+  public resumeChange() {
+    this._ignoreChange = false;
+
+    return this;
+  }
+
+  /**
    * Releases current user input.
    * @ko 사용자의 입력을 강제로 중단시킨다.
    * @return {PanInput} An instance of a module itself <ko>모듈 자신의 인스턴스</ko>
@@ -305,7 +328,7 @@ export class PanInput implements InputType {
       return;
     }
 
-    if (!panEvent || !this._enabled || touches > 1) {
+    if (!panEvent || !this._enabled || touches > 1 || this._ignoreChange) {
       return;
     }
 
@@ -379,7 +402,9 @@ export class PanInput implements InputType {
      * 전파되는 이벤트 객체에 여태까지의 Input 객체를 저장한 스택을 추가.
      * 위의 early return 조건에 의해, 이미 diasabled 상태인 경우에는 스택에 추가되지 않음
      */
-    const panSrcEvent = panEvent?.srcEvent as any;
+    // TODO(@gyutato): any 타입 캐스팅 개선 (InternalSrcEvent, ExtendedEvent 타입 정의 필요)
+    const panSrcEvent = panEvent?.srcEvent as Record<PropertyKey, any> 
+      & { __inputStack?: PanInput[], __axesPrimaryDirection?: number };
 
     if (panSrcEvent) {
       const stack = panSrcEvent.__inputStack || [];
@@ -390,33 +415,29 @@ export class PanInput implements InputType {
      *  부모에게 전달되는 네이티브 이벤트 객체(srcEvent)에 방향 정보 추가
      */
     const hasPrimaryDirection = panSrcEvent.__axesPrimaryDirection;
-    // TODO: 거리 관련 적절한 threshold 추가 (기존 값 사용 X)
+
     // (1) 전달받은 최초 동작 축이 없고, (2) 현재 동작이 threshold 이상인 경우 축 정보를 설정
-    const DIRECTION_THRESHOLD = 20;
     const delta = this._primaryDirection === DIRECTION_HORIZONTAL ?
       activeEvent.prevEvent.deltaX :
       activeEvent.prevEvent.deltaY;
 
-    if (!this._isDirectionSet && Math.abs(delta) >= DIRECTION_THRESHOLD) {
+    if (!this._isDirectionSet && Math.abs(delta) >= threshold) {
       this._isDirectionSet = true;
     }
 
-    // TODO(@gyutato): 하단 prevent 조건문 내부로 이동할 수 있는지 확인
+    /* 이벤트를 통해 최초 방향을 전파하기 위한 조건 */
     if (this._primaryDirection !== DIRECTION_NONE && panSrcEvent && !hasPrimaryDirection && this._isDirectionSet) {
       panSrcEvent.__axesPrimaryDirection = this._primaryDirection;
-      panSrcEvent.__inputStack.forEach((input, index) => {
-        if (index === panSrcEvent.__inputStack.length - 1) {
-          return;
-        } 
-
-        input.release();
+      const childrenInput = panSrcEvent.__inputStack.slice(0, -1);
+      childrenInput.forEach((input, index) => {
+        input.ignoreChange();
       });
     }
 
     if (prevent && (this._isOverThreshold || distance >= threshold)) {
       this._dragged = preventClickOnDrag;
       this._isOverThreshold = true;
-      this._observer.change(this, panEvent, toAxis(this.axes, offset));
+      this._observer.change(this, panEvent, toAxis(this.axes, offset))
     }
     activeEvent.prevEvent = panEvent;
   }
@@ -431,7 +452,7 @@ export class PanInput implements InputType {
     this._detachWindowEvent(activeEvent);
     clearTimeout(this._rightEdgeTimer);
     const prevEvent = activeEvent.prevEvent;
-    const velocity = this._isOverThreshold ? this._getOffset(
+    let velocity = this._isOverThreshold ? this._getOffset(
       [
         Math.abs(prevEvent.velocityX) * prevEvent.directionX,
         Math.abs(prevEvent.velocityY) * prevEvent.directionY,
@@ -441,11 +462,18 @@ export class PanInput implements InputType {
         useDirection(DIRECTION_VERTICAL, this._direction),
       ]
     ) : [0, 0];
+
+    /* _ignoreChange 옵션에 의해 change 가 동작하지 않은 경우, velocity 를 0으로 설정 */
+    if (this._ignoreChange) {
+      velocity = [0, 0];
+    }
+
     activeEvent.onRelease();
     this._observer.release(this, prevEvent, velocity);
     /* 최초 동작 축(방향) 초기화 */
     this._primaryDirection = DIRECTION_NONE;
     this._isDirectionSet = false;
+    this._ignoreChange = false;
   }
 
   protected _attachWindowEvent(activeEvent: ActiveEvent) {

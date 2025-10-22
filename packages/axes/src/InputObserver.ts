@@ -56,7 +56,6 @@ export class InputObserver implements InputTypeObserver {
       return;
     }
 
-    // console.log("hold: ", event.srcEvent.currentTarget, event.srcEvent)
     const changeOption: ChangeEventOption = {
       input,
       event,
